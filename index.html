@@ -26,7 +26,12 @@
           </div>
           <div class="speed-lockup">
             <span class="brand-kicker">SPEED / PX/S</span>
-            <output id="pipe-speed" class="top-speed" aria-label="水管速度">—</output>
+            <output id="pipe-speed" class="top-speed" role="slider" tabindex="0" aria-label="调节速度：左拨加速，右拨减速" aria-valuemin="50" aria-valuemax="200" aria-valuenow="100" aria-controls="speed-controls" aria-expanded="false" title="左拨加速，右拨减速；点击显示调速按钮">—</output>
+            <div id="speed-controls" class="speed-controls" hidden>
+              <div class="speed-help">← 加速 · 向右减速 →</div>
+              <div class="speed-buttons"><button id="speed-increase" type="button" aria-label="加速百分之十">＋</button><output id="speed-percent" aria-live="polite">100%</output><button id="speed-decrease" type="button" aria-label="减速百分之十">−</button></div>
+              <button id="speed-reset" type="button">恢复默认速度</button>
+            </div>
           </div>
         </header>
         <div class="status-strip">
@@ -49,11 +54,25 @@
         <div id="intro-panel" class="overlay-panel intro-panel">
           <div class="eyebrow">CAMERA + MOVEMENT GAME</div>
           <h2>坚持一下，<br /><em>小鸟就会飞。</em></h2>
-          <p>小鸟贴着鼻尖，跟随“下压—撑起”移动。前 3 道水管碰到也不会结束，第 4 道起碰撞即 Game Over。伴着轻快音乐，找到自己的节奏。</p>
+          <p>跟着“慢下—停住—推起”从容练习，或选择原版水管挑战。小鸟依然贴着鼻尖，找到自己的节奏。</p>
           <div class="intro-actions">
+            <button id="guide-button" class="primary-button guide-start" type="button"><span>引导训练</span><b>→</b></button>
             <button id="start-button" class="primary-button" type="button"><span>开始挑战</span><b>→</b></button>
-            <button id="learn-button" class="text-button" type="button">先看实现原理 <span>↘</span></button>
           </div>
+          <details id="tempo-setup" class="tempo-setup">
+            <summary>训练节奏 <span id="tempo-summary">2-1-2 · 每周期5秒</span></summary>
+            <form id="tempo-form">
+              <label>预设<select id="tempo-preset"><option value="2-1-2">入门引导 2-1-2</option><option value="3-1-1">慢下练习 3-1-1</option><option value="custom">自定义</option></select></label>
+              <div class="tempo-fields">
+                <label>慢下 / 秒<input id="tempo-down" type="number" min="0.5" max="6" step="0.5" value="2" required /></label>
+                <label>底停 / 秒<input id="tempo-hold" type="number" min="0" max="3" step="0.5" value="1" required /></label>
+                <label>推起 / 秒<input id="tempo-up" type="number" min="0.5" max="6" step="0.5" value="2" required /></label>
+              </div>
+              <label class="voice-option"><input id="tempo-voice" type="checkbox" /> 阶段语音（设备支持时）</label>
+              <p class="tempo-setup-note">节奏可调，跟慢了可以暂停。引导周期不代表实际俯卧撑次数。</p>
+            </form>
+          </details>
+          <button id="learn-button" class="text-button" type="button">先看使用说明 <span>↘</span></button>
           <div class="shortcut-row"><span>HEAD TRACKING</span> 主控制 <span>CLICK / TAP</span> 无摄像头备用</div>
         </div>
 
@@ -63,17 +82,34 @@
           <div class="countdown-note">准备追踪头部</div>
         </div>
 
+        <section id="tempo-panel" class="tempo-panel is-hidden" aria-label="节奏引导">
+          <div class="tempo-heading"><span id="tempo-phase" role="status">慢下</span><output id="tempo-seconds" aria-label="当前阶段剩余秒数">2.0s</output></div>
+          <div id="tempo-breath" class="tempo-breath">轻轻吸气，受控下降</div>
+          <div class="tempo-track" aria-hidden="true">
+            <div class="tempo-segment" data-segment="down"><i></i><span>慢下</span></div>
+            <div class="tempo-segment" data-segment="hold"><i></i><span>停住</span></div>
+            <div class="tempo-segment" data-segment="up"><i></i><span>推起</span></div>
+          </div>
+          <div id="tempo-disclaimer" class="tempo-disclaimer">计时引导周期，不代表实际完成的俯卧撑次数</div>
+          <div class="tempo-actions">
+            <button id="tempo-pause" type="button">暂停休息</button>
+            <button id="tempo-retry" type="button">重新练习</button>
+            <button id="tempo-finish" type="button">结束训练</button>
+          </div>
+        </section>
+
         <div id="gameover-panel" class="overlay-panel gameover-panel is-hidden">
           <div class="eyebrow">FLIGHT COMPLETE</div>
           <h2>Game Over</h2>
           <div class="final-score-wrap"><span>FINAL SCORE</span><strong id="final-score">00</strong></div>
           <button id="restart-button" class="primary-button" type="button"><span>再飞一次</span><b>↻</b></button>
+          <button id="home-button" class="text-button" type="button">返回选择模式</button>
           <p id="gameover-message" class="gameover-message">坚持得不错，再来一局挑战更高分。</p>
         </div>
 
         <div class="bottom-chrome">
           <div class="tip-chip"><span class="tip-dot"></span><span id="action-hint">打开摄像头后，头部控制小鸟</span></div>
-          <div class="ground-legend">PUSHBIRD / 01</div>
+          <div class="ground-legend">PUSHBIRD / 0.02</div>
         </div>
 
         <button id="sound-button" class="icon-button" type="button" aria-label="关闭音乐与音效" aria-pressed="false" title="音乐与音效开关">♫</button>
@@ -82,7 +118,7 @@
 
       <button id="tutorial-backdrop" class="tutorial-backdrop is-hidden" type="button" aria-label="关闭说明" tabindex="-1"></button>
       <aside id="tutorial-drawer" class="tutorial-drawer" aria-label="实现原理">
-        <div class="drawer-topline"><span>BUILD NOTES / 01</span><button id="close-tutorial" class="close-button" type="button" aria-label="关闭说明">×</button></div>
+        <div class="drawer-topline"><span>BUILD NOTES / 0.02</span><button id="close-tutorial" class="close-button" type="button" aria-label="关闭说明">×</button></div>
         <div class="drawer-content">
           <p class="drawer-kicker">从视频到应用</p>
           <h2>把身体动作，<br /><span>翻译成游戏引擎。</span></h2>
@@ -90,10 +126,10 @@
           <div class="lesson-list">
             <article class="lesson-card"><span>01</span><div><h3>摄像头接入</h3><p><code>getUserMedia()</code> 请求前置摄像头。视频只做背景，不参与游戏绘制；浏览器拒绝权限时，游戏自动保留键盘/触摸模式。</p></div></article>
             <article class="lesson-card"><span>02</span><div><h3>头部跟随</h3><p>MediaPipe Pose 读取鼻子这个头部关键点。把摄像头中的垂直坐标平滑映射到游戏画布，小鸟会实时跟随你的头部上下移动，而不是自动下坠。</p></div></article>
-            <article class="lesson-card"><span>03</span><div><h3>训练反馈</h3><p>俯卧撑下压时头部下降，小鸟同步下降；撑起时头部上升，小鸟同步上升。绿色管道缺口是你的动作目标，连续穿越就是稳定节奏。</p></div></article>
-            <article class="lesson-card"><span>04</span><div><h3>练习与反馈</h3><p>缺口按下压与撑起交替。前 3 道水管有保护，第 4 道起碰撞立即 Game Over；干净通过才加分。界面显示当前水管速度，音乐按钮可同时开关背景音乐与音效。分数是通过缺口数，不是俯卧撑次数。</p></div></article>
+            <article class="lesson-card"><span>03</span><div><h3>三段引导训练</h3><p>默认慢下2秒、底停1秒、推起2秒。进度条与虚线轨迹提示当前目标，不碰管结束；可暂停休息、重新练习或结束。声音随音乐开关，阶段语音可选。下吸上呼，停顿不需要憋气；自然伸直，不要强行过伸。</p></div></article>
+            <article class="lesson-card"><span>04</span><div><h3>挑战与调速</h3><p>挑战前 3 道水管有保护，第 4 道起碰撞立即 Game Over；干净通过才加分。右上速度数字向左拨加速、向右拨减速，点击可用加减/恢复默认按钮；支持触摸和鼠标，范围50%–200%。挑战显示水管速度，引导显示播放倍率。分数是通过缺口数，不是俯卧撑次数。</p></div></article>
           </div>
-          <div class="drawer-footer"><span>TIP</span><p>首次体验请允许摄像头，把头部保持在画面内；没有摄像头时，点击画面不同高度可模拟头部位置。</p></div>
+          <div class="drawer-footer"><span>TIP</span><p>摄像头目前只跟踪鼻尖与额头，不校验动作深度、肘角或标准次数。引导模式仅统计计时周期，纪录按节奏分别保存；节奏可调，不适时随时休息。没有摄像头也可以使用计时引导和点击控制。</p></div>
         </div>
       </aside>
     </main>

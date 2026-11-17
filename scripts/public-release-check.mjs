@@ -25,9 +25,9 @@ for (const file of files) {
   for (const [rule, pattern] of rules) if (pattern.test(text)) failures.push({ file, rule });
 }
 const packageJson = JSON.parse(execFileSync('git', ['show', ':package.json'], { encoding: 'utf8' }));
-if (packageJson.version !== '0.0.1') failures.push({ file: 'package.json', rule: 'release-version' });
+if (!/^0\.\d{2}$/.test(packageJson.releaseVersion) || packageJson.version !== `0.0.${Number(packageJson.releaseVersion?.split('.')[1])}`) failures.push({ file: 'package.json', rule: 'release-version' });
 // Verify original samples and fixture images have not silently been bundled.
 const workingTree = JSON.parse(await readFile(new URL('../package.json', import.meta.url)));
 if (workingTree.version !== packageJson.version) failures.push({ file: 'package.json', rule: 'unstaged-version' });
 if (failures.length) { console.error(JSON.stringify({ status: 'failed', failures }, null, 2)); process.exitCode = 1; }
-else console.log(JSON.stringify({ status: 'passed', files: files.length, bytes, packageVersion: packageJson.version, tag: '0.01', checks: rules.map(([name]) => name) }, null, 2));
+else console.log(JSON.stringify({ status: 'passed', files: files.length, bytes, packageVersion: packageJson.version, tag: packageJson.releaseVersion, checks: rules.map(([name]) => name) }, null, 2));

@@ -118,6 +118,186 @@ async function birdPosition(page) {
 }
 async function birdY(page) { return (await birdPosition(page)).y; }
 
+async function startGuide(page) {
+  await page.locator('#sound-button').click();
+  await page.locator('#guide-button').click();
+  await page.locator('#countdown-panel').waitFor({ state: 'hidden' });
+  await page.clock.pauseAt(new Date(Date.now() + 100));
+}
+
+test('guided tempo shows three proportional phases and counts guide cycles without collision death', async t => {
+  const page = await openGame(t, { clock: true });
+  await startGuide(page);
+  assert.equal(await page.locator('#tempo-panel').getAttribute('data-phase'), 'down');
+  assert.match(await page.locator('#tempo-phase').innerText(), /慢下/);
+  const widths = await page.locator('.tempo-segment').evaluateAll(segments => segments.map(s => s.getBoundingClientRect().width));
+  assert.ok(Math.abs(widths[0] / widths[1] - 2) < .1);
+  await page.clock.runFor(2100);
+  assert.equal(await page.locator('#tempo-panel').getAttribute('data-phase'), 'hold');
+  await page.clock.runFor(1000);
+  assert.equal(await page.locator('#tempo-panel').getAttribute('data-phase'), 'up');
+  await page.mouse.click(850, 112);
+  await page.clock.runFor(2000);
+  assert.equal(await page.locator('#side-score').innerText(), '01');
+  assert.match(await page.locator('.score-caption').innerText(), /引导周期/);
+  assert.match(await page.locator('#tempo-disclaimer').innerText(), /不代表.*俯卧撑/);
+  assert.equal(await page.locator('#gameover-panel').isVisible(), false);
+  assert.equal(await page.evaluate(() => localStorage.getItem('pushbird.bestScore')), null);
+  assert.equal(await page.evaluate(() => localStorage.getItem('pushbird.tempoBest.2-1-2')), '1');
+  if (artifactDir) await page.screenshot({ path: path.join(artifactDir, 'tempo-desktop.png') });
+});
+
+test('guide pause resume retry and finish preserve honest separate records', async t => {
+  const page = await openGame(t, { clock: true });
+  await page.evaluate(() => localStorage.setItem('pushbird.bestScore', '12'));
+  await startGuide(page);
+  await page.clock.runFor(5300);
+  await page.locator('#tempo-pause').click();
+  assert.equal(await page.locator('#tempo-panel').getAttribute('data-status'), 'paused');
+  await page.clock.runFor(20000);
+  assert.equal(await page.locator('#side-score').innerText(), '01');
+  await page.locator('#tempo-pause').click();
+  await page.clock.runFor(2400);
+  assert.equal(await page.locator('#tempo-panel').getAttribute('data-phase'), 'down');
+  assert.equal(await page.locator('#side-score').innerText(), '01');
+  await page.locator('#tempo-retry').click();
+  await page.clock.runFor(2400);
+  assert.equal(await page.locator('#side-score').innerText(), '00');
+  await page.locator('#tempo-finish').click();
+  assert.equal(await page.locator('#gameover-panel h2').innerText(), '训练结束');
+  assert.match(await page.locator('#gameover-message').innerText(), /引导周期/);
+  await page.locator('#home-button').click();
+  assert.equal(await page.locator('#intro-panel').isVisible(), true);
+  await page.locator('#start-button').click();
+  await page.clock.runFor(2400);
+  assert.equal(await page.locator('.score-caption').innerText(), 'SCORE');
+  assert.match(await page.locator('#personal-best').innerText(), /12/);
+  assert.equal(await page.locator('#tempo-panel').isVisible(), false);
+});
+
+test('custom tempo rejects invalid durations and skips a zero pause on mobile', async t => {
+  const page = await openGame(t, { clock: true, viewport: { width: 390, height: 844 }, touch: true });
+  await page.locator('#tempo-setup summary').click();
+  await page.locator('#tempo-preset').selectOption('custom');
+  await page.locator('#tempo-down').fill('0');
+  await page.locator('#guide-button').click();
+  assert.equal(await page.locator('#countdown-panel').isVisible(), false);
+  await page.locator('#tempo-down').fill('2');
+  await page.locator('#tempo-hold').fill('0');
+  await startGuide(page);
+  await page.clock.runFor(2100);
+  assert.equal(await page.locator('#tempo-panel').getAttribute('data-phase'), 'up');
+  assert.equal(await page.locator('.tempo-segment[data-segment="hold"]').isVisible(), false);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  for (const selector of ['#tempo-pause', '#tempo-retry', '#tempo-finish']) {
+    const box = await page.locator(selector).boundingBox();
+    const layout = await page.evaluate(() => ({ x: scrollX, y: scrollY, stage: document.querySelector('.game-stage').getBoundingClientRect().toJSON(), shell: document.querySelector('.app-shell').scrollLeft }));
+    assert.ok(box.x >= 0 && box.y >= 0 && box.x + box.width <= 391 && box.y + box.height <= 844, `${selector}: ${JSON.stringify({box, layout})}`);
+  }
+  if (artifactDir) await page.screenshot({ path: path.join(artifactDir, 'tempo-mobile.png') });
+});
+
+test('opening notes and hiding the page pause the guide without catch-up cycles', async t => {
+  const page = await openGame(t, { clock: true });
+  await startGuide(page);
+  await page.clock.runFor(1200);
+  await page.locator('#tutorial-button').click();
+  assert.equal(await page.locator('#tempo-panel').getAttribute('data-status'), 'paused');
+  await page.locator('#close-tutorial').click();
+  await page.clock.runFor(16000);
+  assert.equal(await page.locator('#side-score').innerText(), '00');
+  await page.locator('#tempo-pause').click();
+  await page.clock.runFor(2400);
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await page.clock.runFor(30000);
+  assert.equal(await page.locator('#tempo-panel').getAttribute('data-status'), 'paused');
+  assert.equal(await page.locator('#side-score').innerText(), '00');
+  assert.equal(await page.locator('#background-music').evaluate(a => a.paused), true);
+});
+
+test('tracking loss pauses an active camera guide and does not resume on a recovered point', async t => {
+  const page = await openGame(t, { clock: true, pose: 'waiting', camera: 'available' });
+  await startGuide(page);
+  await page.evaluate(() => window.__fixture.onResults({ poseLandmarks: [{ x: .5, y: .5, visibility: 1 }] }));
+  await page.clock.runFor(1500);
+  assert.equal(await page.locator('#tempo-panel').getAttribute('data-status'), 'paused');
+  assert.match(await page.locator('#tempo-phase').innerText(), /看不清/);
+  await page.evaluate(() => window.__fixture.onResults({ poseLandmarks: [{ x: .5, y: .5, visibility: 1 }] }));
+  await page.clock.runFor(400);
+  assert.equal(await page.locator('#tempo-panel').getAttribute('data-status'), 'paused');
+});
+
+test('optional guide voice cues are not queued and muting cancels speech and restores music gain', async t => {
+  const page = await openGame(t, { clock: true });
+  await page.evaluate(() => {
+    window.__voice = { spoken: [], canceled: 0 };
+    window.SpeechSynthesisUtterance = class { constructor(text) { this.text = text; } };
+    Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: {
+      speak(utterance) { window.__voice.spoken.push(utterance.text); },
+      cancel() { window.__voice.canceled++; },
+    } });
+  });
+  await page.locator('#tempo-setup summary').click();
+  await page.locator('#tempo-voice').check();
+  await page.locator('#guide-button').click();
+  await page.locator('#countdown-panel').waitFor({ state: 'hidden' });
+  await page.clock.pauseAt(new Date(Date.now() + 100));
+  assert.equal(await page.evaluate(() => window.__voice.spoken.length), 1);
+  assert.equal(await page.locator('#background-music').evaluate(a => a.volume), .08);
+  await page.locator('#sound-button').click();
+  assert.ok(await page.evaluate(() => window.__voice.canceled > 0));
+  assert.equal(await page.locator('#background-music').evaluate(a => a.volume), .24);
+  await page.clock.runFor(5200);
+  assert.equal(await page.evaluate(() => window.__voice.spoken.length), 1);
+});
+
+test('interrupting guide preparation cancels its countdown and returning needs explicit preparation', async t => {
+  const page = await openGame(t, { clock: true });
+  await page.locator('#sound-button').click();
+  await page.locator('#guide-button').click();
+  await page.clock.pauseAt(new Date(Date.now() + 100));
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await page.clock.runFor(12000);
+  assert.equal(await page.locator('#countdown-panel').isVisible(), false);
+  assert.equal(await page.locator('#tempo-panel').getAttribute('data-status'), 'paused');
+  assert.equal(await page.locator('#side-score').innerText(), '00');
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  assert.equal(await page.locator('#tempo-panel').getAttribute('data-status'), 'paused');
+  await page.locator('#tempo-pause').click();
+  await page.clock.runFor(2400);
+  assert.equal(await page.locator('#tempo-panel').getAttribute('data-phase'), 'down');
+});
+
+test('guide controls fit a short phone and preparation fields cannot start the game with Space', async t => {
+  const page = await openGame(t, { clock: true, viewport: { width: 320, height: 568 }, touch: true });
+  assert.equal(await page.title(), 'PushBird — 俯卧撑飞行挑战');
+  assert.equal(await page.locator('vite-error-overlay').count(), 0);
+  await page.locator('#tempo-setup summary').click();
+  await page.locator('#tempo-voice').focus();
+  await page.keyboard.press('Space');
+  assert.equal(await page.locator('#countdown-panel').isVisible(), false);
+  await page.locator('#tempo-voice').uncheck();
+  if (artifactDir) await page.screenshot({ path: path.join(artifactDir, 'tempo-setup-320.png') });
+  await startGuide(page);
+  for (const selector of ['#tempo-panel', '#tempo-pause', '#tempo-retry', '#tempo-finish']) {
+    const box = await page.locator(selector).boundingBox();
+    assert.ok(box.x >= 0 && box.y >= 0 && box.x + box.width <= 321 && box.y + box.height <= 568, JSON.stringify(box));
+  }
+  const card = await page.locator('.score-hud').boundingBox();
+  const guidePanel = await page.locator('#tempo-panel').boundingBox();
+  assert.ok(card.y + card.height + 4 <= guidePanel.y, 'short-phone fallback score does not overlap guide controls');
+  if (artifactDir) await page.screenshot({ path: path.join(artifactDir, 'tempo-guide-320.png') });
+});
+
 async function expectMovement(page, action, direction) {
   const before = await birdY(page);
   await action();
@@ -125,6 +305,72 @@ async function expectMovement(page, action, direction) {
   const after = await birdY(page);
   assert.ok(direction === 'up' ? after < before - 12 : after > before + 12, `bird moves ${direction}: ${before.toFixed(1)} -> ${after.toFixed(1)}`);
 }
+
+test('speed number supports mouse drag, accessible keys, bounded buttons and reset', async t => {
+  const page = await openGame(t);
+  await start(page);
+  const slider = page.locator('#pipe-speed');
+  const box = await slider.boundingBox();
+  await page.mouse.move(box.x + box.width * .8, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * .8 - 64, box.y + box.height / 2, { steps: 8 });
+  await page.mouse.up();
+  assert.equal(await slider.innerText(), '198.0');
+  assert.equal(await slider.getAttribute('aria-valuenow'), '120');
+  await slider.focus();
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await slider.innerText(), '181.5');
+  await page.keyboard.press('ArrowLeft');
+  assert.equal(await slider.innerText(), '198.0');
+  await page.locator('#speed-reset').click();
+  assert.equal(await slider.innerText(), '165.0');
+  for (let i = 0; i < 10; i++) await page.locator('#speed-increase').click();
+  assert.equal(await slider.getAttribute('aria-valuenow'), '200');
+  assert.equal(await page.locator('#speed-increase').isDisabled(), true);
+  assert.equal(await page.locator('#speed-increase').evaluate(e => e.getBoundingClientRect().height >= 44), true);
+});
+
+test('tablet touch swipes change speed without moving the bird or scrolling the stage', async t => {
+  const page = await openGame(t, { viewport: { width: 1024, height: 768 }, touch: true });
+  await start(page);
+  const before = await birdPosition(page);
+  const slider = page.locator('#pipe-speed');
+  const box = await slider.boundingBox();
+  const client = await page.context().newCDPSession(page);
+  const x = box.x + box.width / 2, y = box.y + box.height / 2;
+  for (const delta of [-64, 64]) {
+    await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+    await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x + delta, y }] });
+    await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    assert.equal(await slider.getAttribute('aria-valuenow'), delta < 0 ? '120' : '100');
+  }
+  await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+  await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x - 4, y: y + 64 }] });
+  await client.send('Input.dispatchTouchEvent', { type: 'touchCancel', touchPoints: [] });
+  assert.equal(await slider.getAttribute('aria-valuenow'), '100', 'vertical swipe does not change speed');
+  const after = await birdPosition(page);
+  assert.ok(Math.abs(after.y - before.y) < 2);
+  assert.equal(await page.locator('.app-shell').evaluate(e => e.scrollLeft), 0);
+  await page.locator('#speed-controls').waitFor({ state: 'visible' });
+  if (artifactDir) await page.screenshot({ path: path.join(artifactDir, 'speed-tablet.png') });
+});
+
+test('guide speed changes real time continuously and stays adjustable while paused', async t => {
+  const page = await openGame(t, { clock: true });
+  await startGuide(page);
+  await page.clock.runFor(500);
+  await page.locator('#pipe-speed').click();
+  await page.locator('#speed-increase').click();
+  assert.equal(await page.locator('#pipe-speed').getAttribute('aria-valuenow'), '110');
+  assert.equal(await page.locator('#side-score').innerText(), '00');
+  await page.clock.runFor(4200);
+  assert.equal(await page.locator('#side-score').innerText(), '01');
+  await page.locator('#tempo-pause').click();
+  await page.locator('#pipe-speed').click();
+  await page.locator('#speed-decrease').click();
+  assert.equal(await page.locator('#pipe-speed').getAttribute('aria-valuenow'), '100');
+  assert.equal(await page.locator('#tempo-panel').getAttribute('data-status'), 'paused');
+});
 
 test('camera denial preserves real pointer and keyboard control', async t => {
   const page = await openGame(t);
