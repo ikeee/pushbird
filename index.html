@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#15232f" />
+    <meta name="description" content="PushBird：用俯卧撑动作让小鸟穿越管道。" />
+    <link rel="icon" type="image/svg+xml" href="/pushbird-mark.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=ZCOOL+KuaiLe&display=swap" rel="stylesheet" />
+    <title>PushBird — 俯卧撑飞行挑战</title>
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="game-stage" aria-label="PushBird 游戏区域">
+        <video id="camera-feed" class="camera-feed" autoplay muted playsinline></video>
+        <audio id="background-music" src="/audio/pushbird-breeze.mp3" loop preload="none"></audio>
+        <div class="camera-wash"></div>
+        <canvas id="game-canvas" class="game-canvas"></canvas>
+
+        <header class="top-bar">
+          <div class="brand-lockup">
+            <span class="brand-kicker">PUSH / PLAY</span>
+            <h1>FlappyBird</h1>
+          </div>
+          <div class="speed-lockup">
+            <span class="brand-kicker">SPEED / PX/S</span>
+            <output id="pipe-speed" class="top-speed" aria-label="水管速度">—</output>
+          </div>
+        </header>
+        <div class="status-strip">
+          <span id="control-mode" class="mode-pill">点击控制</span>
+          <span id="camera-status" class="camera-status"><i></i>准备摄像头</span>
+        </div>
+
+        <div class="score-hud" aria-live="polite">
+          <div class="score-caption">SCORE</div>
+          <div id="side-score" class="side-score">00</div>
+          <div id="personal-best" class="personal-best">个人纪录 00</div>
+        </div>
+        <div id="record-confetti" class="record-confetti" aria-hidden="true"></div>
+        <div id="record-celebration" class="record-celebration is-hidden" role="status">
+          <strong id="record-title">新纪录！</strong>
+          <span id="record-feedback"></span>
+        </div>
+
+
+        <div id="intro-panel" class="overlay-panel intro-panel">
+          <div class="eyebrow">CAMERA + MOVEMENT GAME</div>
+          <h2>坚持一下，<br /><em>小鸟就会飞。</em></h2>
+          <p>小鸟贴着鼻尖，跟随“下压—撑起”移动。前 3 道水管碰到也不会结束，第 4 道起碰撞即 Game Over。伴着轻快音乐，找到自己的节奏。</p>
+          <div class="intro-actions">
+            <button id="start-button" class="primary-button" type="button"><span>开始挑战</span><b>→</b></button>
+            <button id="learn-button" class="text-button" type="button">先看实现原理 <span>↘</span></button>
+          </div>
+          <div class="shortcut-row"><span>HEAD TRACKING</span> 主控制 <span>CLICK / TAP</span> 无摄像头备用</div>
+        </div>
+
+        <div id="countdown-panel" class="countdown-panel is-hidden" aria-live="assertive">
+          <div class="countdown-label">GET READY</div>
+          <div id="countdown-number" class="countdown-number">3</div>
+          <div class="countdown-note">准备追踪头部</div>
+        </div>
+
+        <div id="gameover-panel" class="overlay-panel gameover-panel is-hidden">
+          <div class="eyebrow">FLIGHT COMPLETE</div>
+          <h2>Game Over</h2>
+          <div class="final-score-wrap"><span>FINAL SCORE</span><strong id="final-score">00</strong></div>
+          <button id="restart-button" class="primary-button" type="button"><span>再飞一次</span><b>↻</b></button>
+          <p id="gameover-message" class="gameover-message">坚持得不错，再来一局挑战更高分。</p>
+        </div>
+
+        <div class="bottom-chrome">
+          <div class="tip-chip"><span class="tip-dot"></span><span id="action-hint">打开摄像头后，头部控制小鸟</span></div>
+          <div class="ground-legend">PUSHBIRD / 01</div>
+        </div>
+
+        <button id="sound-button" class="icon-button" type="button" aria-label="关闭音乐与音效" aria-pressed="false" title="音乐与音效开关">♫</button>
+        <button id="tutorial-button" class="tutorial-trigger" type="button"><span>?</span> HOW IT WORKS</button>
+      </section>
+
+      <button id="tutorial-backdrop" class="tutorial-backdrop is-hidden" type="button" aria-label="关闭说明" tabindex="-1"></button>
+      <aside id="tutorial-drawer" class="tutorial-drawer" aria-label="实现原理">
+        <div class="drawer-topline"><span>BUILD NOTES / 01</span><button id="close-tutorial" class="close-button" type="button" aria-label="关闭说明">×</button></div>
+        <div class="drawer-content">
+          <p class="drawer-kicker">从视频到应用</p>
+          <h2>把身体动作，<br /><span>翻译成游戏引擎。</span></h2>
+          <p class="drawer-intro">这个版本把视频中的“实景 + 像素游戏”拆成四层：摄像头、姿态信号、Canvas 游戏循环和 UI 状态。</p>
+          <div class="lesson-list">
+            <article class="lesson-card"><span>01</span><div><h3>摄像头接入</h3><p><code>getUserMedia()</code> 请求前置摄像头。视频只做背景，不参与游戏绘制；浏览器拒绝权限时，游戏自动保留键盘/触摸模式。</p></div></article>
+            <article class="lesson-card"><span>02</span><div><h3>头部跟随</h3><p>MediaPipe Pose 读取鼻子这个头部关键点。把摄像头中的垂直坐标平滑映射到游戏画布，小鸟会实时跟随你的头部上下移动，而不是自动下坠。</p></div></article>
+            <article class="lesson-card"><span>03</span><div><h3>训练反馈</h3><p>俯卧撑下压时头部下降，小鸟同步下降；撑起时头部上升，小鸟同步上升。绿色管道缺口是你的动作目标，连续穿越就是稳定节奏。</p></div></article>
+            <article class="lesson-card"><span>04</span><div><h3>练习与反馈</h3><p>缺口按下压与撑起交替。前 3 道水管有保护，第 4 道起碰撞立即 Game Over；干净通过才加分。界面显示当前水管速度，音乐按钮可同时开关背景音乐与音效。分数是通过缺口数，不是俯卧撑次数。</p></div></article>
+          </div>
+          <div class="drawer-footer"><span>TIP</span><p>首次体验请允许摄像头，把头部保持在画面内；没有摄像头时，点击画面不同高度可模拟头部位置。</p></div>
+        </div>
+      </aside>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
