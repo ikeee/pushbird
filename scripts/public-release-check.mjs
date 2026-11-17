@@ -25,7 +25,9 @@ for (const file of files) {
   for (const [rule, pattern] of rules) if (pattern.test(text)) failures.push({ file, rule });
 }
 const packageJson = JSON.parse(execFileSync('git', ['show', ':package.json'], { encoding: 'utf8' }));
-if (!/^0\.\d{2}$/.test(packageJson.releaseVersion) || packageJson.version !== `0.0.${Number(packageJson.releaseVersion?.split('.')[1])}`) failures.push({ file: 'package.json', rule: 'release-version' });
+const release = /^0\.(\d{2})(?:\.(\d+))?$/.exec(packageJson.releaseVersion);
+const expectedVersion = release ? (release[2] === undefined ? `0.0.${Number(release[1])}` : `0.${Number(release[1])}.${Number(release[2])}`) : null;
+if (!expectedVersion || packageJson.version !== expectedVersion) failures.push({ file: 'package.json', rule: 'release-version' });
 // Verify original samples and fixture images have not silently been bundled.
 const workingTree = JSON.parse(await readFile(new URL('../package.json', import.meta.url)));
 if (workingTree.version !== packageJson.version) failures.push({ file: 'package.json', rule: 'unstaged-version' });

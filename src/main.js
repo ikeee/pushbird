@@ -1,9 +1,8 @@
 import './styles.css';
 import { trainingStep, pipeOutcome, pipeSpeed } from './training.js';
 import { scoreCardPosition } from './forehead.js';
-import { createTempoGuide } from './tempo-guide.js';
-import { validateTempo } from './tempo.js';
 import { bindSpeedControl } from './speed.js';
+import { PipeStream } from './pipe-stream.js';
 
 const canvas = document.querySelector('#game-canvas');
 const ctx = canvas.getContext('2d');
@@ -32,11 +31,8 @@ music.volume = .24;
 const speedDisplay = document.querySelector('#pipe-speed');
 
 const state = {
-  mode: 'challenge',
   countdownTimer: null,
-  awaitingTracking: false,
   challengeSpeed: 1,
-  guideSpeed: 1,
   phase: 'ready',
   score: 0,
   lastTime: 0,
@@ -46,7 +42,7 @@ const state = {
   width: 0,
   height: 0,
   scale: 1,
-  nextPipe: 0,
+  pipeStream: null,
   audioEnabled: true,
   audioContext: null,
   cameraReady: false,
@@ -100,53 +96,11 @@ const settings = {
   groundHeight: 48,
 };
 
-const tempoInputs = ['down', 'hold', 'up'].map(id => document.querySelector(`#tempo-${id}`));
-const tempoPreset = document.querySelector('#tempo-preset');
-const tempoGuide = createTempoGuide({
-  music, audioEnabled: () => state.audioEnabled, tone: playTone,
-  onCycle(count) {
-    state.score = count; setScore(count); state.pulse = 1;
-    updateRecord();
-  },
-  onPause() { music.pause(); },
-});
 const speedControl = bindSpeedControl({ slider: speedDisplay, onChange(factor, previous) {
-  if (state.mode === 'guide') {
-    state.guideSpeed = factor;
-    tempoGuide.setRate(performance.now(), factor);
-  } else {
-    state.challengeSpeed = factor;
-    for (const pipe of state.pipes) pipe.speed *= factor / previous;
-  }
+  state.challengeSpeed = factor;
+  for (const pipe of state.pipes) pipe.speed *= factor / previous;
   refreshTrainingHUD();
 } });
-
-function scoreKey() {
-  return state.mode === 'guide' ? `pushbird.tempoBest.${tempoGuide.durations.join('-')}` : 'pushbird.bestScore';
-}
-
-function selectMode(mode) {
-  state.mode = mode;
-  document.querySelector('.game-stage').classList.toggle('is-guiding', mode === 'guide');
-  document.querySelector('.score-caption').textContent = mode === 'guide' ? '引导周期' : 'SCORE';
-  document.querySelector('.speed-lockup .brand-kicker').textContent = mode === 'guide' ? 'SPEED / ×' : 'SPEED / PX/S';
-  speedControl.hide();
-  speedControl.sync(mode === 'guide' ? state.guideSpeed : state.challengeSpeed);
-  state.bestScore = readBestScore();
-  renderPersonalBest();
-}
-
-function updateTempoSummary() {
-  const durations = tempoInputs.map(input => input.valueAsNumber);
-  document.querySelector('#tempo-summary').textContent = durations.every(Number.isFinite)
-    ? `${durations.join('-')} · 每周期${durations.reduce((a, b) => a + b, 0)}秒` : '请填写各阶段秒数';
-}
-tempoPreset.addEventListener('change', () => {
-  if (tempoPreset.value !== 'custom') tempoPreset.value.split('-').forEach((value, index) => { tempoInputs[index].value = value; });
-  updateTempoSummary();
-});
-tempoInputs.forEach(input => input.addEventListener('input', () => { tempoPreset.value = 'custom'; updateTempoSummary(); }));
-document.querySelector('#tempo-form').addEventListener('submit', event => event.preventDefault());
 
 function resizeCanvas() {
   const rect = canvas.getBoundingClientRect();
@@ -176,13 +130,13 @@ function setScore(value) {
 
 function readBestScore() {
   try {
-    const value = Number(localStorage.getItem(scoreKey()));
+    const value = Number(localStorage.getItem('pushbird.bestScore'));
     return Number.isSafeInteger(value) && value >= 0 ? value : 0;
   } catch { return 0; }
 }
 
 function renderPersonalBest() {
-  personalBest.textContent = `${state.mode === 'guide' ? `${tempoGuide.durations.join('-')} 周期纪录` : '个人纪录'} ${String(state.bestScore).padStart(2, '0')}`;
+  personalBest.textContent = `个人纪录 ${String(state.bestScore).padStart(2, '0')}`;
 }
 
 function clearRecordFlash() {
@@ -200,8 +154,8 @@ function clearRecordCelebration() {
 
 function celebrateRecord(firstScore = false) {
   clearRecordCelebration();
-  recordTitle.textContent = state.mode === 'guide' ? (firstScore ? '首个引导周期！' : '引导新纪录！') : firstScore ? '首次得分！' : '新纪录！';
-  recordFeedback.textContent = state.mode === 'guide' ? '按自己的节奏来，随时可以休息' : firstScore ? '迈出第一步，太棒了！继续保持你的节奏' : `突破 ${state.bestAtStart} 分，太棒了！保持你的节奏`;
+  recordTitle.textContent = firstScore ? '首次得分！' : '新纪录！';
+  recordFeedback.textContent = firstScore ? '迈出第一步，太棒了！继续保持你的节奏' : `突破 ${state.bestAtStart} 分，太棒了！保持你的节奏`;
   recordCelebration.classList.remove('is-hidden');
   if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
     const colors = ['#ff536d', '#ffd451', '#67e8a5', '#53c8ff', '#b292ff', '#ff9f43', '#fff8e8'];
@@ -225,7 +179,7 @@ function celebrateRecord(firstScore = false) {
 function updateRecord() {
   if (state.score > state.bestScore) {
     state.bestScore = state.score;
-    try { localStorage.setItem(scoreKey(), String(Math.max(state.bestScore, readBestScore()))); } catch { /* 无持久存储仍能正常游玩 */ }
+    try { localStorage.setItem('pushbird.bestScore', String(Math.max(state.bestScore, readBestScore()))); } catch { /* 无持久存储仍能正常游玩 */ }
   }
   renderPersonalBest();
   if (state.recordBroken || state.score <= state.bestAtStart) return false;
@@ -247,7 +201,7 @@ function resetRound() {
   state.score = 0;
   state.pipes = [];
   state.groundOffset = 0;
-  state.nextPipe = 0;
+  state.pipeStream = null;
   state.bird = { x: .24, y: .45, velocity: 0, rotation: 0, flap: 0 };
   state.pulse = 0;
   state.collisionGrace = 0;
@@ -269,12 +223,11 @@ function resetRound() {
   refreshTrainingHUD();
 }
 
-function beginCountdown(resume = false) {
-  if (state.phase === 'countdown' || state.phase === 'playing' && !(state.mode === 'guide' && tempoGuide.paused)) return;
+function beginCountdown() {
+  if (state.phase === 'countdown' || state.phase === 'playing') return;
   clearInterval(state.countdownTimer);
-  tempoGuide.prepare(!resume);
   music.currentTime = 0;
-  if (!resume) resetRound();
+  resetRound();
   state.phase = 'countdown';
   startMusic();
   introPanel.classList.add('is-hidden');
@@ -294,15 +247,10 @@ function beginCountdown(resume = false) {
       countdownPanel.classList.add('is-hidden');
       state.phase = 'playing';
       state.lastTime = performance.now();
-      state.nextPipe = 0;
+      state.pipeStream = null;
       state.anchorY = state.headY;
       state.collisionGrace = 1.35;
-      if (state.mode === 'guide') {
-        state.awaitingTracking = false;
-        tempoGuide.setRate(performance.now(), state.guideSpeed);
-        tempoGuide.start(performance.now(), !resume);
-        actionHint.textContent = '按舒适幅度练习，跟慢了可暂停休息';
-      } else actionHint.textContent = '前 3 道放心练习，第 4 道开始正式挑战';
+      actionHint.textContent = '前 3 道放心练习，第 4 道开始正式挑战';
       playTone(760, .12);
     }
   }, 760);
@@ -312,12 +260,8 @@ function endRound() {
   if (state.phase !== 'playing') return;
   state.phase = 'gameover';
   music.pause();
-  tempoGuide.stop();
-  document.querySelector('#gameover-panel h2').textContent = state.mode === 'guide' ? '训练结束' : 'Game Over';
-  document.querySelector('.final-score-wrap span').textContent = state.mode === 'guide' ? '引导周期' : 'FINAL SCORE';
-  document.querySelector('#restart-button span').textContent = state.mode === 'guide' ? '再练一轮' : '再飞一次';
   finalScore.textContent = String(state.score).padStart(2, '0');
-  gameoverMessage.textContent = state.mode === 'guide' ? `已播放 ${state.score} 个完整引导周期，不代表实际俯卧撑次数。休息好再继续。` : state.score > 0 ? `已稳稳通过 ${state.score} 道，休息好再继续。` : '已经找到起点，休息好可以再慢慢来。';
+  gameoverMessage.textContent = state.score > 0 ? `已稳稳通过 ${state.score} 道，休息好再继续。` : '已经找到起点，休息好可以再慢慢来。';
   gameoverPanel.classList.remove('is-hidden');
   actionHint.textContent = '点击“再飞一次”重新开始';
   playTone(380, .12);
@@ -337,22 +281,26 @@ function flap() {
   playTone(680, .055, 'square');
 }
 
-function spawnPipe() {
+function currentTrainingStep() {
   const step = trainingStep({ index: state.pipeIndex, width: state.width, height: state.height,
     groundHeight: settings.groundHeight, birdX: state.width * state.bird.x,
     anchorY: state.anchorY, successes: state.score, streak: state.streak, speedFactor: state.challengeSpeed });
-  state.pipes.push({ ...step, passed: false, hit: false, width: settings.pipeWidth });
+  return step;
+}
+
+function spawnPipe(x) {
+  const step = currentTrainingStep();
+  state.pipes.push({ ...step, x, passed: false, hit: false, width: settings.pipeWidth });
   state.pipeIndex++;
-  return step.interval;
 }
 
 function refreshTrainingHUD() {
   const next = state.pipes.find(pipe => !pipe.passed);
-  const factor = state.mode === 'guide' ? state.guideSpeed : state.challengeSpeed;
-  const speed = state.mode === 'guide' ? `${factor.toFixed(1)}×` : (next?.speed ?? pipeSpeed(state.width) * factor).toFixed(1);
+  const factor = state.challengeSpeed;
+  const speed = (next?.speed ?? pipeSpeed(state.width) * factor).toFixed(1);
   if (speedDisplay.textContent !== speed) {
     speedDisplay.textContent = speed;
-    speedDisplay.setAttribute('aria-label', state.mode === 'guide' ? `引导速度${factor.toFixed(1)}倍；左拨加速，右拨减速` : `水管速度 ${speed} px/s；左拨加速，右拨减速`);
+    speedDisplay.setAttribute('aria-label', `水管速度 ${speed} px/s；左拨加速，右拨减速`);
   }
 }
 
@@ -393,21 +341,22 @@ function updateGame(dt) {
   state.bird.flap = Math.max(0, state.bird.flap - safeDt * 7);
   state.pulse = Math.max(0, state.pulse - safeDt * 5);
   if (state.phase !== 'playing') return;
-  if (state.mode === 'guide') {
-    tempoGuide.update(performance.now());
-    if (!tempoGuide.paused) state.groundOffset = (state.groundOffset + pipeSpeed(state.width) * state.guideSpeed * safeDt) % 48;
-    return;
-  }
   state.feedbackTime = Math.max(0, state.feedbackTime - safeDt);
   state.collisionGrace = Math.max(0, state.collisionGrace - safeDt);
-  state.groundOffset = (state.groundOffset + pipeSpeed(state.width) * state.challengeSpeed * safeDt) % 48;
-  state.nextPipe -= safeDt;
-  if (state.nextPipe <= 0) {
-    state.nextPipe = spawnPipe();
+  const speed = pipeSpeed(state.width) * state.challengeSpeed;
+  const travel = speed * safeDt;
+  state.groundOffset = (state.groundOffset + travel) % 48;
+  for (const pipe of state.pipes) {
+    pipe.speed = speed;
+    pipe.x -= travel;
   }
+  if (!state.pipeStream) {
+    const step = currentTrainingStep();
+    state.pipeStream = new PipeStream({ originX: step.x, spacing: step.spacing });
+  }
+  for (const x of state.pipeStream.advance(travel)) spawnPipe(x);
   const bird = birdRect();
   for (const pipe of state.pipes) {
-    pipe.x -= pipe.speed * safeDt;
     // A gate is assessed once. A warmup contact teaches without ending the round.
     if (!pipe.passed && !pipe.hit && (intersects(bird, { x: pipe.x, y: 0, w: pipe.width, h: pipe.top }) ||
       intersects(bird, { x: pipe.x, y: pipe.top + pipe.gap, w: pipe.width, h: state.height - settings.groundHeight - pipe.top - pipe.gap }))) {
@@ -440,7 +389,6 @@ function intersects(a, b) {
 function draw() {
   ctx.clearRect(0, 0, state.width, state.height);
   drawPipes();
-  if (state.mode === 'guide' && state.phase === 'playing') tempoGuide.draw(ctx, state.width, state.height);
   drawBird();
   drawGround();
   positionScoreHUD();
@@ -558,6 +506,9 @@ function drawPulse() {
 }
 
 function frame(now) {
+  // RAF supplies the frame's start time, which can precede a countdown callback's
+  // performance.now(). Never let that ordering move the simulation backwards.
+  now = Math.max(now, state.lastTime);
   const dt = state.lastTime ? (now - state.lastTime) / 1000 : 0;
   state.lastTime = now;
   requestFaceFrame(now);
@@ -630,10 +581,6 @@ function loadPose() {
 }
 
 function useManualControl(label, kind = '') {
-  if (state.mode === 'guide' && state.poseReady) {
-    state.awaitingTracking = true;
-    pauseGuide('暂时看不清头部，请调整位置后继续');
-  }
   if (state.poseReady) {
     state.headTargetX = state.headX;
     state.manualTargetY = state.headY;
@@ -667,7 +614,7 @@ function releaseCamera() {
   state.cameraReady = false;
   video.srcObject = null;
 }
-window.addEventListener('pagehide', () => { pauseGuide('页面已离开，准备好再继续'); clearRecordFlash(); clearRecordCelebration(); music.pause(); releaseCamera(); });
+window.addEventListener('pagehide', () => { clearRecordFlash(); clearRecordCelebration(); music.pause(); releaseCamera(); });
 
 function stopFaceTracking() {
   state.faceWorker?.terminate();
@@ -803,53 +750,24 @@ function playTone(frequency, duration, type = 'sine') {
 }
 
 function startMusic() {
-  if (!state.audioEnabled || document.hidden || state.mode === 'guide' && state.phase === 'playing' && tempoGuide.paused) return;
+  if (!state.audioEnabled || document.hidden) return;
   music.play().catch(() => { soundButton.title = '背景音乐暂不可用，点击可重试'; });
 }
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) { pauseGuide('切回页面后，准备好再继续'); music.pause(); }
+  if (document.hidden) { music.pause(); }
   else if (state.phase === 'playing' || state.phase === 'countdown') startMusic();
 });
 
-function pauseGuide(reason) {
-  if (state.mode !== 'guide') return;
-  if (state.phase === 'countdown') {
-    clearInterval(state.countdownTimer); state.countdownTimer = null;
-    countdownPanel.classList.add('is-hidden');
-    state.phase = 'playing';
-  }
-  if (state.phase === 'playing') { tempoGuide.pause(reason); tempoGuide.silence(); music.pause(); }
-}
-
-document.querySelector('#start-button').addEventListener('click', () => { selectMode('challenge'); enableCamera(); beginCountdown(); });
-document.querySelector('#guide-button').addEventListener('click', () => {
-  const form = document.querySelector('#tempo-form');
-  if (!form.checkValidity()) { document.querySelector('#tempo-setup').open = true; form.reportValidity(); return; }
-  const durations = validateTempo(tempoInputs.map(input => input.valueAsNumber));
-  tempoGuide.configure(durations, document.querySelector('#tempo-voice').checked);
-  selectMode('guide'); enableCamera(); beginCountdown();
-});
-document.querySelector('#restart-button').addEventListener('click', () => beginCountdown());
-document.querySelector('#tempo-pause').addEventListener('click', () => {
-  if (!tempoGuide.paused) pauseGuide('休息一下，准备好再继续');
-  else if (state.awaitingTracking && !state.poseReady) {
-    actionHint.textContent = '头部尚未入镜；调整位置，或结束后用无摄像头模式练习';
-  } else beginCountdown(true);
-});
-document.querySelector('#tempo-retry').addEventListener('click', () => {
-  if (state.awaitingTracking && !state.poseReady) { actionHint.textContent = '请先让头部重新入镜，或结束后选择无摄像头练习'; return; }
-  pauseGuide('重新准备'); beginCountdown();
-});
-document.querySelector('#tempo-finish').addEventListener('click', endRound);
+document.querySelector('#start-button').addEventListener('click', () => { enableCamera(); beginCountdown(); });
+document.querySelector('#restart-button').addEventListener('click', beginCountdown);
 document.querySelector('#home-button').addEventListener('click', () => {
-  tempoGuide.stop(); clearInterval(state.countdownTimer);
-  clearRecordFlash(); clearRecordCelebration(); music.pause();
-  state.phase = 'ready'; state.pipes = []; state.awaitingTracking = false;
-  setScore(0); state.score = 0; selectMode('challenge'); refreshTrainingHUD();
+  clearInterval(state.countdownTimer);
+  clearRecordFlash(); clearRecordCelebration(); music.pause(); speedControl.hide();
+  state.phase = 'ready'; state.pipes = []; state.score = 0;
+  setScore(0); refreshTrainingHUD();
   gameoverPanel.classList.add('is-hidden'); introPanel.classList.remove('is-hidden');
 });
 function setTutorialOpen(open) {
-  if (open) pauseGuide('说明已打开，读完后点击继续');
   tutorialDrawer.classList.toggle('is-open', open);
   tutorialBackdrop.classList.toggle('is-hidden', !open);
 }
@@ -863,7 +781,7 @@ soundButton.addEventListener('click', () => {
   soundButton.textContent = state.audioEnabled ? '♫' : '×';
   soundButton.setAttribute('aria-pressed', String(!state.audioEnabled));
   soundButton.setAttribute('aria-label', state.audioEnabled ? '关闭音乐与音效' : '开启音乐与音效');
-  if (!state.audioEnabled) { music.pause(); tempoGuide.silence(); }
+  if (!state.audioEnabled) { music.pause(); }
   else if (state.phase === 'playing' || state.phase === 'countdown') startMusic();
 });
 window.addEventListener('keydown', (event) => {

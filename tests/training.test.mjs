@@ -4,13 +4,14 @@ import { trainingStep, pipeOutcome } from '../src/training.js';
 
 const initial = { index: 0, width: 1280, height: 800, groundHeight: 60, birdX: 307, anchorY: .45, successes: 0, streak: 0 };
 
-test('user speed changes pipe travel while preserving at least four seconds of preview', () => {
+test('user speed changes travel and spawn time but never horizontal spacing', () => {
   const normal = trainingStep(initial);
   for (const speedFactor of [.5, 1.5, 2]) {
     const step = trainingStep({ ...initial, speedFactor });
     assert.equal(step.speed, normal.speed * speedFactor);
     assert.ok((step.x - initial.birdX) / step.speed >= 3.99);
-    assert.equal(step.interval, normal.interval);
+    assert.ok(Math.abs(step.speed * step.interval - normal.speed * normal.interval) < .000001);
+    assert.equal(step.spacing, normal.spacing);
   }
 });
 
@@ -31,15 +32,15 @@ test('targets alternate down and up rather than jumping randomly', () => {
   assert.ok(steps[1].centerY > steps[0].centerY);
   assert.ok(Math.abs(steps[2].centerY - steps[0].centerY) < 1);
   assert.equal(steps[1].centerY, steps[3].centerY);
-  assert.ok(Math.abs(steps[0].interval - 3 / 1.3) < .000001);
+  assert.ok(Math.abs(steps[0].interval - 3 / 1.3 * 1.5 / 2) < .000001);
 });
 
-test('difficulty grows only after sustained success and remains bounded', () => {
+test('difficulty may narrow the vertical opening but never changes horizontal density', () => {
   const early = trainingStep(initial);
   const failed = trainingStep({ ...initial, index: 100, successes: 0, streak: 0 });
   const advanced = trainingStep({ ...initial, index: 100, successes: 100, streak: 100 });
   assert.equal(failed.interval, early.interval);
-  assert.ok(advanced.interval >= 2.4 / 1.3);
+  assert.equal(advanced.interval, early.interval);
   assert.ok(advanced.gap >= 800 * .28);
   assert.ok(advanced.gap < early.gap);
 });
@@ -77,12 +78,13 @@ test('pipe travel speed is precisely fifty percent faster than the previous desk
   assert.equal(trainingStep({ ...initial, width: 320 }).speed, 52.5);
 });
 
-test('pipe density is exactly thirty percent higher at every difficulty without changing its speed', () => {
-  for (const progress of [0, .25, .5, 1]) {
+test('pipe density doubles the previous fixed spacing without changing speed or vertical gap', () => {
+  for (const width of [320, 390, 1280]) for (const speedFactor of [.5, 1, 2]) for (const progress of [0, .25, .5, 1]) {
     const successes = 4 + progress * 16, streak = 3 + progress * 16;
-    const step = trainingStep({ ...initial, successes, streak });
-    const previousInterval = 3 - .6 * progress;
-    assert.ok(Math.abs(previousInterval / step.interval - 1.3) < .000001);
-    assert.equal(step.speed, trainingStep(initial).speed);
+    const step = trainingStep({ ...initial, width, index: 4, speedFactor, successes, streak });
+    const previousSpacing = trainingStep({ ...initial, width }).speed * 3 / 1.3 * 1.5;
+    assert.ok(Math.abs(previousSpacing / (step.speed * step.interval) - 2) < .000001);
+    assert.equal(step.speed, trainingStep({ ...initial, width, speedFactor }).speed);
+    assert.equal(step.gap, initial.height * (.32 - .04 * progress));
   }
 });

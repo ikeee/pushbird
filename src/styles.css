@@ -84,39 +84,8 @@ h1, .top-speed { display: block; font-family: var(--pixel); font-size: clamp(25p
 .intro-panel h2 { font-size: clamp(32px, 4vw, 50px); }
 .intro-panel p { margin-bottom: 16px; font-size: 17px; }
 .intro-actions { gap: 12px; }
-.intro-panel:has(#tempo-setup[open]) .intro-actions { position: sticky; top: -1px; z-index: 2; padding: 8px 0 12px; background: #17232d; }
 .intro-actions .primary-button { font-family: var(--round); font-size: 18px; gap: 14px; }
-.intro-actions #start-button { background: var(--paper); }
-.tempo-setup { margin: 20px 0 4px; font: 14px/1.45 sans-serif; }
-.tempo-setup summary { cursor: pointer; padding: 8px 0; color: var(--sun); }
-.tempo-setup summary span { margin-left: 8px; font-size: 12px; color: var(--paper); }
-.tempo-setup form { padding: 10px 0; }
-.tempo-setup label { display: grid; gap: 6px; min-width: 0; }
-.tempo-setup select, .tempo-setup input[type=number] { width: 100%; min-height: 38px; padding: 6px 8px; background: var(--paper-bright); color: var(--ink); border: 1px solid var(--paper); border-radius: 2px; font: 16px sans-serif; }
-.tempo-fields { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; margin: 12px 0; }
-.tempo-setup .voice-option { display: flex; align-items: center; gap: 8px; }
-.voice-option input { width: 18px; height: 18px; accent-color: var(--lime); }
-.tempo-setup .tempo-setup-note { font: 12px/1.6 sans-serif; margin: 10px 0 0; }
 .intro-panel .shortcut-row { margin-top: 12px; }
-.tempo-panel { position: absolute; z-index: 5; left: 34px; bottom: 105px; width: min(430px, calc(100% - 68px)); padding: 18px 20px; color: var(--paper-bright); background: rgba(23,35,45,.94); border: 2px solid var(--paper); box-shadow: 6px 6px 0 rgba(23,35,45,.35); }
-.tempo-heading { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
-#tempo-phase { font: 26px/1.2 var(--round); color: var(--lime); }
-#tempo-seconds { font: 18px/1.2 var(--pixel); white-space: nowrap; }
-.tempo-breath { font: 13px/1.5 sans-serif; margin: 9px 0 14px; color: var(--paper); }
-.tempo-track { display: flex; gap: 6px; height: 32px; }
-.tempo-segment { position: relative; background: rgba(244,234,209,.12); border: 1px solid rgba(244,234,209,.4); overflow: hidden; min-width: 0; }
-.tempo-segment i { position: absolute; inset: 0; background: var(--lime); transform: scaleX(0); transform-origin: left; }
-.tempo-segment[data-segment=hold] i { background: var(--sun); }
-.tempo-segment[data-segment=up] i { background: #53c8ff; }
-.tempo-segment span { position: relative; z-index: 1; display: grid; place-items: center; height: 100%; color: var(--paper-bright); text-shadow: 1px 1px 1px var(--ink), -1px -1px 1px var(--ink); font: 13px sans-serif; }
-.tempo-disclaimer { font: 11px/1.5 sans-serif; color: rgba(255,248,232,.7); margin: 10px 0; }
-.tempo-actions { display: flex; gap: 8px; }
-.tempo-actions button { flex: 1; cursor: pointer; padding: 9px 5px; min-height: 40px; color: var(--paper-bright); border: 1px solid rgba(244,234,209,.5); background: transparent; font: 14px sans-serif; }
-.tempo-actions button:first-child { color: var(--ink); background: var(--lime); border-color: var(--lime); }
-.is-guiding .score-caption { font-family: var(--round); font-size: 22px; }
-.is-guiding .record-celebration { top: 29%; }
-.is-guiding .record-celebration strong { font-size: clamp(26px, 4vw, 38px); }
-.is-guiding .tip-chip { max-width: calc(100% - 160px); font-family: sans-serif; font-size: 12px; }
 .gameover-panel #home-button { display: block; margin: 18px auto 0; }
 .primary-button { appearance: none; border: 2px solid var(--ink); color: var(--ink); background: var(--lime); box-shadow: 5px 5px 0 var(--ink); min-height: 50px; padding: 12px 15px 12px 19px; cursor: pointer; display: inline-flex; align-items: center; justify-content: space-between; gap: 22px; transition: transform .16s ease, box-shadow .16s ease, background .16s ease; font-family: var(--pixel); font-size: 11px; }
 .primary-button b { font-size: 17px; line-height: 1; }
@@ -179,12 +148,6 @@ code { font-family: var(--pixel); color: var(--lime-deep); font-size: .66em; }
   .intro-panel { max-height: calc(100svh - 190px); }
   .intro-panel h2 { font-size: 34px; }
   .intro-panel p { font-size: 15px; }
-  .tempo-panel { left: 17px; bottom: 110px; width: calc(100% - 34px); padding: 14px; }
-  #tempo-phase { font-size: 23px; }
-  #tempo-seconds { font-size: 15px; }
-  .tempo-breath { font-size: 12px; }
-  .tempo-actions button { font-size: 13px; }
-  .is-guiding .tip-chip { max-width: calc(100% - 110px); font-size: 11px; }
   .overlay-panel h2 { font-size: 39px; }
   .overlay-panel p { font-size: 17px; }
   .primary-button { font-size: 9px; min-height: 46px; }
@@ -198,11 +161,5 @@ code { font-family: var(--pixel); color: var(--lime-deep); font-size: .66em; }
   .tutorial-drawer { min-height: 100svh; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
-@media (max-width: 720px) and (max-height: 700px) {
-  .is-guiding .score-hud[data-anchor=none] { width: 150px; padding: 10px 12px; box-shadow: 5px 5px 0 rgba(23,35,45,.45); }
-  .is-guiding .score-hud[data-anchor=none] .score-caption { font-size: 16px; margin-bottom: 6px; }
-  .is-guiding .score-hud[data-anchor=none] .side-score { font-size: 36px; }
-  .is-guiding .score-hud[data-anchor=none] .personal-best { font-size: 11px; margin-top: 6px; }
-}
 @media (prefers-reduced-motion: reduce) { .score-hud.is-record-breaking { animation: none; background-color: #d63341; color: #fff8e8; border-color: #ffb5b5; } }
 @media (prefers-reduced-motion: reduce) { .record-confetti { display: none; } }
